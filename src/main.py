@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import plistlib
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ from tkinter import font as tkfont
 
 from openpyxl import Workbook
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 GITHUB_REPO = "gregstrick/battery-health-checker"
 WEBSITE_URL = "https://gregstrick.github.io/battery-health-checker/"
 
@@ -237,10 +238,25 @@ def run(cmd):
         return 1, "", str(e)
 
 
-def get_udid():
+def get_udids():
     _, out, _ = run([IDEVICE_ID, "-l"])
-    udids = [line.strip() for line in out.splitlines() if line.strip()]
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+def get_udid():
+    udids = get_udids()
     return udids[0] if udids else None
+
+
+def binary_exists(path_str):
+    p = Path(path_str)
+    if p.is_absolute():
+        return p.exists()
+    return shutil.which(path_str) is not None
+
+
+def binaries_available():
+    return all(binary_exists(p) for p in (IDEVICE_ID, IDEVICEINFO, IDEVICEDIAGNOSTICS))
 
 
 def get_device_info(udid):
@@ -318,6 +334,7 @@ class DeviceLog:
 
     def __init__(self):
         self.records = {}
+        self.last_xlsx_error = None
         if LOG_JSON.exists():
             try:
                 self.records = json.loads(LOG_JSON.read_text())
@@ -383,8 +400,20 @@ class DeviceLog:
         self._save()
 
     def _save(self):
-        LOG_JSON.write_text(json.dumps(self.records, indent=2))
-        self._write_xlsx()
+        self._write_json()
+        self.last_xlsx_error = None
+        try:
+            self._write_xlsx()
+        except Exception as e:
+            # Most commonly: the file is open in Excel and locked for writing.
+            # The JSON above is the source of truth and already saved safely,
+            # so we just remember the error to surface in the UI and move on.
+            self.last_xlsx_error = str(e)
+
+    def _write_json(self):
+        tmp = LOG_JSON.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(self.records, indent=2))
+        os.replace(tmp, LOG_JSON)
 
     def _write_xlsx(self):
         wb = Workbook()
@@ -403,7 +432,9 @@ class DeviceLog:
         widths = [12, 22, 30, 10, 16, 16, 12, 20, 20, 14, 18, 18, 20] + [22] * len(CHECK_ITEMS)
         for idx, width in enumerate(widths, start=1):
             ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = width
-        wb.save(LOG_XLSX)
+        tmp = LOG_XLSX.with_suffix(".xlsx.tmp")
+        wb.save(tmp)
+        os.replace(tmp, LOG_XLSX)
 
 
 class Badge(tk.Canvas):
@@ -611,13 +642,17 @@ class App:
     def _count_text(self):
         n = len(self.log.records)
         base = f"{n} device{'s' if n != 1 else ''} logged"
+        if self.log.last_xlsx_error:
+            return f"⚠ Close Device Log.xlsx to save the latest test   ·   {base}"
         if self.update_available_version:
             return f"Update v{self.update_available_version} available — click to download   ·   {base}"
         return f"v{VERSION}   ·   {base}"
 
     def refresh_footer(self):
         self.count_var.set(self._count_text())
-        if self.update_available_version:
+        if self.log.last_xlsx_error:
+            self.footer_label.configure(fg=RED, cursor="arrow")
+        elif self.update_available_version:
             self.footer_label.configure(fg=ORANGE, cursor="pointinghand" if not IS_WINDOWS else "hand2")
         else:
             self.footer_label.configure(fg=FG_DIM, cursor="arrow")
@@ -640,7 +675,6 @@ class App:
     def open_log(self):
         target = LOG_XLSX if LOG_XLSX.exists() else DATA_DIR
         if IS_WINDOWS:
-            import os
             os.startfile(str(target))
         else:
             subprocess.run(["open", str(target)])
@@ -657,11 +691,11 @@ class App:
         for item, row in self.check_rows.items():
             row.set_checked(bool(checks.get(item, False)))
 
-    def set_waiting(self, message="Waiting for iPad…"):
+    def set_waiting(self, message="Waiting for iPad…", badge_text="WAITING", badge_color=None):
         self.last_udid = None
         self.current_serial = None
         self.subtitle_var.set(message)
-        self.badge.set("WAITING", FG_DIM)
+        self.badge.set(badge_text, badge_color or FG_DIM)
         self.gauge.set(None, FG_DIM)
         for key, var in self.row_vars.items():
             var.set("--")
@@ -670,11 +704,20 @@ class App:
         self.grade_selector.set_selected(None)
 
     def poll(self):
-        udid = get_udid()
-        if not udid:
+        if not binaries_available():
+            self.subtitle_var.set("USB tools not found — try reinstalling the app")
+            self.badge.set("SETUP ERROR", RED)
+            self.gauge.set(None, FG_DIM)
+            self.root.after(POLL_MS, self.poll)
+            return
+
+        udids = get_udids()
+        if not udids:
             self.set_waiting()
-        elif udid != self.last_udid:
-            self.handle_new_connection(udid)
+        elif len(udids) > 1:
+            self.set_waiting("Multiple devices connected — plug in just one at a time", "TOO MANY DEVICES", ORANGE)
+        elif udids[0] != self.last_udid:
+            self.handle_new_connection(udids[0])
         self.root.after(POLL_MS, self.poll)
 
     def handle_new_connection(self, udid):
@@ -689,6 +732,7 @@ class App:
             return
 
         self.last_udid = udid
+        self.root.bell()
         serial = info.get("SerialNumber", "Unknown")
         product_type = info.get("ProductType", "Unknown")
         model_name = PRODUCT_NAMES.get(product_type, product_type)
