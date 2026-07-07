@@ -1,0 +1,83 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to attach the built .exe files to'
+        required: true
+        default: 'v1.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r windows/requirements.txt
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --noconfirm --windowed --onefile `
+            --name "Battery Health Checker" `
+            --icon "windows\AppIcon.ico" `
+            --add-data "windows\bin;bin" `
+            src\main.py
+
+      - name: Rename artifact
+        run: Copy-Item "dist\Battery Health Checker.exe" "BatteryHealthChecker-Windows-x64.exe"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BatteryHealthChecker-Windows-x64
+          path: BatteryHealthChecker-Windows-x64.exe
+
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.inputs.release_tag }}" BatteryHealthChecker-Windows-x64.exe --clobber --repo "${{ github.repository }}"
+
+  build-arm64:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r windows-arm64/requirements.txt
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --noconfirm --windowed --onefile `
+            --name "Battery Health Checker" `
+            --icon "windows-arm64\AppIcon.ico" `
+            --add-data "windows-arm64\bin;bin" `
+            src\main.py
+
+      - name: Rename artifact
+        run: Copy-Item "dist\Battery Health Checker.exe" "BatteryHealthChecker-Windows-arm64.exe"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BatteryHealthChecker-Windows-arm64
+          path: BatteryHealthChecker-Windows-arm64.exe
+
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.inputs.release_tag }}" BatteryHealthChecker-Windows-arm64.exe --clobber --repo "${{ github.repository }}"
