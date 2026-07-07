@@ -1,0 +1,14 @@
+.venv/
+.venv-windows/
+.venv-windows-arm64/
+build/
+dist/
+__pycache__/
+*.pyc
+device_log.json
+Device Log.xlsx
+~$Device Log.xlsx
+.DS_Store
+Battery Health Checker.app/
+*.spec
+.claude/

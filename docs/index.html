@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Battery Health Checker</title>
+<link rel="icon" href="icon-256.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="icon-256.png" alt="Battery Health Checker icon">
+    <h1>Battery Health Checker</h1>
+    <p>Plug in an iPhone or iPad, see battery health, storage, and cycle count instantly. Pick your platform below.</p>
+  </header>
+
+  <div class="cards">
+    <div class="card" id="card-mac">
+      <div class="platform-icon">🍎</div>
+      <h2>macOS</h2>
+      <p class="sub">Apple Silicon &amp; Intel</p>
+      <a class="btn pending" id="btn-mac" href="#">Loading…</a>
+      <div class="status-line" id="status-mac"></div>
+    </div>
+
+    <div class="card" id="card-win-x64">
+      <div class="platform-icon">🪟</div>
+      <h2>Windows</h2>
+      <p class="sub">Intel / AMD 64-bit</p>
+      <a class="btn pending" id="btn-win-x64" href="#">Loading…</a>
+      <div class="status-line" id="status-win-x64"></div>
+    </div>
+
+    <div class="card" id="card-win-arm64">
+      <div class="platform-icon">🪟</div>
+      <h2>Windows (ARM64)</h2>
+      <p class="sub">Surface Pro X, Snapdragon</p>
+      <a class="btn pending" id="btn-win-arm64" href="#">Loading…</a>
+      <div class="status-line" id="status-win-arm64"></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>First run</h3>
+    <ul>
+      <li><strong>macOS:</strong> right-click the app &rarr; Open the first time (unsigned app, Gatekeeper will warn once).</li>
+      <li><strong>Windows:</strong> click "More info" &rarr; "Run anyway" if SmartScreen warns (unsigned .exe).</li>
+      <li>First time you plug in each physical device, tap <strong>Trust</strong> on its screen and enter its passcode. After that, it connects instantly with no prompts.</li>
+      <li>Each computer keeps its own separate device log &mdash; they don't sync between Mac and Windows.</li>
+    </ul>
+  </div>
+
+  <footer id="footer-note"></footer>
+</div>
+
+<script>
+const REPO = "gregstrick/battery-health-checker";
+const ASSETS = {
+  "mac": "BatteryHealthChecker-macOS.zip",
+  "win-x64": "BatteryHealthChecker-Windows-x64.exe",
+  "win-arm64": "BatteryHealthChecker-Windows-arm64.exe",
+};
+
+async function loadRelease() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+    if (!res.ok) throw new Error("no release");
+    const data = await res.json();
+    const byName = {};
+    for (const a of (data.assets || [])) byName[a.name] = a;
+
+    for (const [key, filename] of Object.entries(ASSETS)) {
+      const btn = document.getElementById(`btn-${key}`);
+      const status = document.getElementById(`status-${key}`);
+      const asset = byName[filename];
+      if (asset) {
+        btn.href = asset.browser_download_url;
+        btn.textContent = "Download";
+        btn.classList.remove("pending");
+        const sizeMb = (asset.size / (1024 * 1024)).toFixed(1);
+        status.textContent = `${sizeMb} MB · v${data.tag_name}`;
+      } else {
+        btn.href = "#";
+        btn.textContent = "Coming soon";
+        status.textContent = "Not built yet";
+      }
+    }
+    document.getElementById("footer-note").textContent = `Latest release: ${data.tag_name}`;
+  } catch (e) {
+    for (const key of Object.keys(ASSETS)) {
+      document.getElementById(`btn-${key}`).textContent = "Unavailable";
+      document.getElementById(`status-${key}`).textContent = "Could not reach GitHub";
+    }
+  }
+}
+
+loadRelease();
+</script>
+</body>
+</html>
