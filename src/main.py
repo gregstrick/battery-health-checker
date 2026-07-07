@@ -4,12 +4,19 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import threading
+import urllib.request
+import webbrowser
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import font as tkfont
 
 from openpyxl import Workbook
+
+VERSION = "1.1.0"
+GITHUB_REPO = "gregstrick/battery-health-checker"
+WEBSITE_URL = "https://gregstrick.github.io/battery-health-checker/"
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -283,6 +290,27 @@ def battery_health_percent(battery):
     if not design or not raw_max:
         return None
     return min(round((raw_max / design) * 100), 100)
+
+
+def version_tuple(v):
+    parts = []
+    for x in v.split("."):
+        digits = "".join(c for c in x if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+def fetch_latest_version():
+    try:
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+            headers={"Accept": "application/vnd.github+json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("tag_name", "").lstrip("v")
+    except Exception:
+        return None
 
 
 class DeviceLog:
@@ -566,8 +594,11 @@ class App:
         tk.Button(footer, text="Refresh", command=self.poll, **btn_style).pack(side="left", expand=True, padx=(24, 6))
         tk.Button(footer, text="Open Log", command=self.open_log, **btn_style).pack(side="right", expand=True, padx=(6, 24))
 
+        self.update_available_version = None
         self.count_var = tk.StringVar(value=self._count_text())
-        tk.Label(root, textvariable=self.count_var, font=tkfont.Font(size=10), bg=BG, fg=FG_DIM).pack(side="bottom", pady=(0, 4))
+        self.footer_label = tk.Label(root, textvariable=self.count_var, font=tkfont.Font(size=10), bg=BG, fg=FG_DIM)
+        self.footer_label.pack(side="bottom", pady=(0, 4))
+        self.footer_label.bind("<Button-1>", self._on_footer_click)
 
         root.update_idletasks()
         root.geometry("460x850")
@@ -575,10 +606,36 @@ class App:
         root.resizable(False, False)
 
         self.poll()
+        self._check_for_update_async()
 
     def _count_text(self):
         n = len(self.log.records)
-        return f"{n} device{'s' if n != 1 else ''} logged"
+        base = f"{n} device{'s' if n != 1 else ''} logged"
+        if self.update_available_version:
+            return f"Update v{self.update_available_version} available — click to download   ·   {base}"
+        return f"v{VERSION}   ·   {base}"
+
+    def refresh_footer(self):
+        self.count_var.set(self._count_text())
+        if self.update_available_version:
+            self.footer_label.configure(fg=ORANGE, cursor="pointinghand" if not IS_WINDOWS else "hand2")
+        else:
+            self.footer_label.configure(fg=FG_DIM, cursor="arrow")
+
+    def _check_for_update_async(self):
+        def worker():
+            latest = fetch_latest_version()
+            if latest and version_tuple(latest) > version_tuple(VERSION):
+                self.root.after(0, lambda: self._set_update_available(latest))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _set_update_available(self, latest):
+        self.update_available_version = latest
+        self.refresh_footer()
+
+    def _on_footer_click(self, _event):
+        if self.update_available_version:
+            webbrowser.open(WEBSITE_URL)
 
     def open_log(self):
         target = LOG_XLSX if LOG_XLSX.exists() else DATA_DIR
@@ -676,7 +733,7 @@ class App:
         self.row_vars["Capacity"].set(f"{raw_max} / {design} mAh")
         self.set_checklist(entry.get("checks", {}))
         self.grade_selector.set_selected(entry.get("cosmetic_grade"))
-        self.count_var.set(self._count_text())
+        self.refresh_footer()
 
 
 def main():

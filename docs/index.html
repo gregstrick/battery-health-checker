@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Battery Health Checker</title>
+<meta name="description" content="Plug in an iPhone or iPad, see battery health, storage, and cycle count instantly.">
+<meta property="og:title" content="Battery Health Checker">
+<meta property="og:description" content="Plug in an iPhone or iPad, see battery health, storage, and cycle count instantly.">
+<meta property="og:image" content="icon-256.png">
 <link rel="icon" href="icon-256.png">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -12,32 +16,51 @@
   <header>
     <img src="icon-256.png" alt="Battery Health Checker icon">
     <h1>Battery Health Checker</h1>
-    <p>Plug in an iPhone or iPad, see battery health, storage, and cycle count instantly. Pick your platform below.</p>
+    <p>Plug in an iPhone or iPad, see battery health, storage, and cycle count instantly.</p>
   </header>
 
   <div class="cards">
-    <div class="card" id="card-mac">
-      <div class="platform-icon">🍎</div>
+    <div class="card" id="card-mac" data-platform="mac">
+      <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16.5 3c.3 1.4-.2 2.8-1 3.8-.8 1-2.1 1.8-3.4 1.7-.3-1.3.3-2.7 1-3.6.9-1.1 2.4-1.8 3.4-1.9zM20.4 17.2c-.5 1.2-.8 1.8-1.5 2.8-.9 1.4-2.2 3.2-3.9 3.2-1.4 0-1.8-.9-3.7-.9s-2.4.9-3.7.9c-1.6 0-2.9-1.6-3.8-3-2.6-3.9-2.9-8.5-1.3-11 1.1-1.8 2.9-2.9 4.6-2.9 1.7 0 2.8 1 4.2 1 1.3 0 2.2-1 4.2-1 1.5 0 3.1.8 4.2 2.2-3.7 2-3.1 7.4.7 8.7z"/></svg>
       <h2>macOS</h2>
       <p class="sub">Apple Silicon &amp; Intel</p>
       <a class="btn pending" id="btn-mac" href="#">Loading…</a>
       <div class="status-line" id="status-mac"></div>
     </div>
 
-    <div class="card" id="card-win-x64">
-      <div class="platform-icon">🪟</div>
+    <div class="card" id="card-win-x64" data-platform="win-x64">
+      <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5.5 10.5 4.4V11.5H3V5.5zM11.5 4.3 21 3v8.5H11.5V4.3zM3 12.5H10.5V19.6L3 18.5V12.5zM11.5 12.5H21V21L11.5 19.7V12.5z"/></svg>
       <h2>Windows</h2>
       <p class="sub">Intel / AMD 64-bit</p>
       <a class="btn pending" id="btn-win-x64" href="#">Loading…</a>
       <div class="status-line" id="status-win-x64"></div>
     </div>
 
-    <div class="card" id="card-win-arm64">
-      <div class="platform-icon">🪟</div>
+    <div class="card" id="card-win-arm64" data-platform="win-arm64">
+      <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5.5 10.5 4.4V11.5H3V5.5zM11.5 4.3 21 3v8.5H11.5V4.3zM3 12.5H10.5V19.6L3 18.5V12.5zM11.5 12.5H21V21L11.5 19.7V12.5z"/></svg>
       <h2>Windows (ARM64)</h2>
       <p class="sub">Surface Pro X, Snapdragon</p>
       <a class="btn pending" id="btn-win-arm64" href="#">Loading…</a>
       <div class="status-line" id="status-win-arm64"></div>
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="feature">
+      <h3>Instant detection</h3>
+      <p>Plug in over USB and results appear in about a second &mdash; no button to press.</p>
+    </div>
+    <div class="feature">
+      <h3>Full device details</h3>
+      <p>Battery health %, cycle count, storage size, serial number, and model &mdash; all in one screen.</p>
+    </div>
+    <div class="feature">
+      <h3>Manual QC checklist</h3>
+      <p>Check off screen, cameras, speakers, buttons, and Wi-Fi &mdash; saved per device.</p>
+    </div>
+    <div class="feature">
+      <h3>Excel logging built in</h3>
+      <p>Every test writes to a spreadsheet automatically, with duplicate detection so you never re-test the same unit twice.</p>
     </div>
   </div>
 
@@ -62,6 +85,16 @@ const ASSETS = {
   "win-arm64": "BatteryHealthChecker-Windows-arm64.exe",
 };
 
+function detectPlatform() {
+  const ua = navigator.userAgent;
+  const platform = navigator.platform || "";
+  if (/Mac/.test(platform) && !/iPhone|iPad/.test(ua)) return "mac";
+  // Windows ARM64 vs x64 isn't reliably detectable from user agent alone
+  // (ARM64 Windows often reports as x64 for compatibility), so default to x64.
+  if (/Win/.test(platform)) return "win-x64";
+  return null;
+}
+
 async function loadRelease() {
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
@@ -79,7 +112,7 @@ async function loadRelease() {
         btn.textContent = "Download";
         btn.classList.remove("pending");
         const sizeMb = (asset.size / (1024 * 1024)).toFixed(1);
-        status.textContent = `${sizeMb} MB · v${data.tag_name}`;
+        status.textContent = `${sizeMb} MB · ${data.tag_name}`;
       } else {
         btn.href = "#";
         btn.textContent = "Coming soon";
@@ -95,7 +128,15 @@ async function loadRelease() {
   }
 }
 
+function highlightDetectedPlatform() {
+  const platform = detectPlatform();
+  if (!platform) return;
+  const card = document.querySelector(`.card[data-platform="${platform}"]`);
+  if (card) card.classList.add("detected");
+}
+
 loadRelease();
+highlightDetectedPlatform();
 </script>
 </body>
 </html>

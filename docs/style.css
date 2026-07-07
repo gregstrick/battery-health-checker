@@ -68,11 +68,18 @@ header p {
   align-items: center;
   text-align: center;
   gap: 6px;
+  transition: border-color 0.15s;
+}
+
+.card.detected {
+  border-color: var(--blue);
 }
 
 .card .platform-icon {
-  font-size: 34px;
+  width: 34px;
+  height: 34px;
   margin-bottom: 6px;
+  color: var(--text-main);
 }
 
 .card h2 {
@@ -116,6 +123,24 @@ header p {
   color: var(--text-dim);
   margin-top: 8px;
   min-height: 14px;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px 32px;
+  margin-bottom: 40px;
+}
+
+.feature h3 {
+  font-size: 14px;
+  margin: 0 0 4px;
+}
+
+.feature p {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0;
 }
 
 .notes {
